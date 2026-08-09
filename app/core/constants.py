@@ -1,0 +1,2 @@
+ALLOWED_AUDIO_EXTENSIONS = frozenset({".m4a", ".mp3", ".wav"})
+EMBEDDING_DIMENSION = 384

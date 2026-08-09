@@ -12,7 +12,9 @@ from app.main import app
 
 
 @pytest.fixture(autouse=True)
-def isolated_database(tmp_path: Path) -> Iterator[None]:
+def isolated_database(
+    tmp_path: Path,
+) -> Iterator[async_sessionmaker[AsyncSession]]:
     database_path = tmp_path / "test.db"
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{database_path}",
@@ -30,6 +32,6 @@ def isolated_database(tmp_path: Path) -> Iterator[None]:
 
     asyncio.run(create_schema())
     app.dependency_overrides[get_db_session] = override_session
-    yield
+    yield session_maker
     app.dependency_overrides.pop(get_db_session, None)
     asyncio.run(engine.dispose())

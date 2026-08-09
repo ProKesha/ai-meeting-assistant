@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     local_whisper_model: str = "small"
     local_whisper_device: str = "cpu"
     local_whisper_compute_type: str = "int8"
+    local_embedding_model: str = "intfloat/multilingual-e5-small"
+    local_embedding_device: str = "cpu"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_analysis_model: str = "llama3.2:3b"
 

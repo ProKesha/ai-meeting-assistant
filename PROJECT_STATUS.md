@@ -1,186 +1,116 @@
 # Project Status
 
-Last updated: 2026-08-08
+Last verified: 2026-08-09
 
-## Current Milestone
+## Release State
 
-Persistent AI Meeting Assistant MVP completed and pushed to GitHub.
+**V1 completed — ready for final commit and push after user review.**
 
-Repository:
-https://github.com/ProKesha/ai-meeting-assistant
+The application now provides an end-to-end local meeting workflow: audio upload,
+transcription, structured analysis, persistent meeting history, transcript retrieval,
+semantic search, grounded question answering, and a responsive user interface.
 
-## Implemented
+Repository: [ProKesha/ai-meeting-assistant](https://github.com/ProKesha/ai-meeting-assistant)
 
-### Backend
-- FastAPI application
-- Health endpoint
-- Meeting creation
-- Meeting detail endpoint
-- Recent meeting history
-- Audio upload
-- UUID-based filenames
-- MP3 / WAV / M4A support
-- 50 MiB upload limit
-- End-to-end meeting processing endpoint
+## Delivered V1
 
-### Transcription
-- Provider-based transcription architecture
-- Local faster-whisper provider
-- Optional OpenAI transcription provider
-- Default local model: faster-whisper small
-- CPU / int8 local configuration
+### Meeting Processing
 
-### AI Analysis
-- Ollama integration
-- Default model: llama3.2:3b
-- Structured JSON output
-- Pydantic validation
-- Summary extraction
-- Decisions
-- Action items
-- Assignee extraction
-- Deadline extraction
-- Priority
-- Open questions
+- FastAPI health, meeting creation, history, detail, audio, transcription, analysis,
+  and end-to-end processing endpoints
+- MP3, WAV, and M4A upload with a 50 MiB limit and server-generated filenames
+- Local faster-whisper transcription, with optional OpenAI transcription support
+- Structured Ollama analysis through `llama3.2:3b` with Pydantic validation
+- Summary, decisions, action items, assignees, deadlines, priorities, and open questions
+- Explicit `created`, `uploaded`, `processing`, `completed`, and `failed` lifecycle states
 
-### Persistence
-- PostgreSQL
-- SQLAlchemy 2.x async
-- asyncpg
-- Alembic migrations
-- Meetings table
-- Action items table
-- Meeting lifecycle statuses
-- Transcript persistence
-- Analysis persistence
-- Model metadata persistence
+### Persistence and Retrieval
+
+- PostgreSQL persistence through async SQLAlchemy and asyncpg
+- Alembic migrations for meetings, action items, pgvector, and transcript chunks
+- Deterministic paragraph/sentence-aware transcript chunking
+- 1,200-character maximum chunk size with 200-character overlap
+- Local normalized embeddings from `intfloat/multilingual-e5-small`
+- Dimensioned `vector(384)` storage for every persisted non-empty chunk
+- pgvector cosine search with stable result ordering and optional meeting filtering
+- Grounded RAG endpoint that returns application-owned meeting source metadata
+- Failure handling that does not leave unsuccessful processing marked `completed`
 
 ### Frontend
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Meeting upload dashboard
-- Processing states
-- Results display
-- Recent meeting history
-- Stored meeting retrieval
-- Collapsible transcript
 
-### Testing
-- 43 backend tests passing
-- AI providers mocked in automated tests
-- Database tests use dependency overrides
-- Frontend lint passes
-- Frontend production build passes
+- Next.js, TypeScript, and Tailwind CSS dashboard
+- Meeting upload and honest processing states
+- Summary-first result display with readable action items and collapsible transcript
+- Recent meeting history and stored meeting reopening
+- Ask Your Meetings workflow with grounded answers and clickable sources
+- Neutral insufficient-information and local-service error states
+- Responsive desktop, tablet, and mobile layouts
+- Accessible labels, focus states, keyboard submission, and reduced-motion support
 
-## Verified Manually
+### Architecture
 
-Full real workflow successfully tested:
+- Request-scoped repository and service dependencies
+- Processing orchestration in the service layer rather than HTTP routes
+- Typed API schemas and frontend API client
+- Lazy, cached, concurrency-safe E5 model initialization
+- Exact cosine search retained for the current local corpus; HNSW is intentionally deferred
+  until observed scale or latency justifies an index
 
-Audio upload
-→ faster-whisper transcription
-→ Ollama / llama3.2:3b analysis
-→ structured response
-→ PostgreSQL persistence
+## Verification
 
-PostgreSQL was manually verified to contain:
+Automated release checks completed successfully on 2026-08-09:
 
-- completed meeting status
-- summary
-- transcription model
-- analysis model
+- Backend: `109 passed` with one third-party Starlette TestClient deprecation warning
+- Alembic upgrade: database is at head
+- Alembic schema check: no new upgrade operations detected
+- Current Alembic head: `0003_embedding_dimension`
+- Python compilation: passed for `app`, `tests`, and `alembic`
+- Frontend ESLint: passed
+- Frontend production build: passed
+- Git whitespace check: passed
+- Python dependency integrity and declared import smoke check: passed
+- One-command local startup via `./start.sh` implemented and smoke-tested
 
-Action item persistence is implemented; the sample recording produced zero action items because it contained no explicit tasks.
+Manual V1 smoke testing also covered:
 
-## Current Local AI Configuration
+- Real upload through transcription, structured analysis, embeddings, and persistence
+- Reloaded recent history and stored meeting detail
+- Grounded cross-meeting question answering with a clickable source
+- Insufficient-information behavior without a fabricated answer
+- Friendly Ollama-unavailable behavior
+- Desktop, tablet, and mobile layouts without horizontal overflow
+- Temporary smoke-test database and audio artifacts cleaned up after verification
 
-TRANSCRIPTION_PROVIDER=local
-LOCAL_WHISPER_MODEL=small
-LOCAL_WHISPER_DEVICE=cpu
-LOCAL_WHISPER_COMPUTE_TYPE=int8
+## Repository Hygiene
 
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_ANALYSIS_MODEL=llama3.2:3b
+- Root and frontend environment files are ignored; only `.env.example` templates are tracked
+- `.venv`, `node_modules`, `.next`, Python/tool caches, local audio storage, and OS/editor
+  files are ignored
+- No credentials, uploaded audio, model cache, virtual environment, frontend build output,
+  or dependency directory is tracked
+- Heavy AI/model dependencies are mocked in automated tests
 
-## Known Limitations
+## Current Limitations
 
 - Processing is synchronous
-- Audio is stored on the local filesystem
-- No authentication
-- No background queue
+- Audio uses local filesystem storage
+- No authentication or per-user access control
+- No background job queue
 - No speaker diarization
-- No RAG yet
-- No semantic search yet
-- No cloud deployment yet
-- Local LLM output quality depends on model quality
+- No cloud deployment configuration
+- Local AI speed and output quality depend on hardware and selected models
 
-## Next Planned Milestone
+## Potential V2
 
-RAG and semantic search over meeting history.
+- Authentication and per-user meeting access
+- Background processing and progress updates
+- Speaker diarization
+- Cloud object storage and deployment
+- Calendar and task-tracker integrations
 
-Planned direction:
+These are optional V2 directions. They are not required for the completed V1 scope.
 
-1. pgvector
-2. transcript chunking
-3. local embeddings
-4. vector persistence
-5. semantic search API
-6. RAG question answering across meetings
-7. potentially LangGraph workflow orchestration
+## Release Note
 
-## Git Milestone
-
-Initial persistent MVP committed and pushed to:
-
-ProKesha/ai-meeting-assistant
-
-Branch:
-main
-
-## Important Notes
-
-- Do not commit `.env`
-- Do not commit API keys or PostgreSQL credentials
-- Do not commit uploaded audio
-- `llama3.2:3b` is the verified default local analysis model
-- `qwen3-vl:4b` was tested but was unsuitable for the current structured-output implementation
-
-## Next Session Plan
-
-Tomorrow we will continue with the next AI milestone:
-
-### 1. Add pgvector
-- Enable the pgvector extension in PostgreSQL
-- Add vector storage to the database
-- Create the required migration
-
-### 2. Add transcript chunking
-- Split meeting transcripts into meaningful chunks
-- Define chunk size and overlap strategy
-- Persist chunks with meeting references
-
-### 3. Add embeddings
-- Choose a local embedding model
-- Generate embeddings for transcript chunks
-- Store embeddings in PostgreSQL
-
-### 4. Add semantic search
-- Implement similarity search across meeting transcripts
-- Add an API endpoint for semantic search
-
-Example query:
-
-"What did we decide about the product launch?"
-
-### 5. Start RAG over meeting history
-- Retrieve relevant transcript chunks
-- Pass retrieved context to the LLM
-- Generate answers grounded in previous meetings
-
-Target result:
-
-The application should be able to answer questions across stored meeting history instead of processing each meeting independently.
-
-### If Time Allows
-- Add a simple search / ask interface to the Next.js dashboard
-- Improve filtering of weak structured outputs such as meaningless open questions
+The baseline repository is on `main`. The completed V1 changes remain intentionally
+uncommitted and unpushed pending the final audit review.

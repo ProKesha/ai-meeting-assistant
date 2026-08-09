@@ -4,7 +4,8 @@ from uuid import UUID, uuid4
 
 from fastapi import UploadFile
 
-ALLOWED_AUDIO_EXTENSIONS = {".m4a", ".mp3", ".wav"}
+from app.core.constants import ALLOWED_AUDIO_EXTENSIONS
+
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
 UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 

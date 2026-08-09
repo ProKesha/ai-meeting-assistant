@@ -1,169 +1,163 @@
-# AI Meeting & Task Assistant
+# AI Meeting Assistant
 
-AI Meeting & Task Assistant is an end-to-end AI automation application that turns meeting recordings into transcripts, concise summaries, explicit decisions, structured action items, and open questions.
+AI Meeting Assistant turns meeting recordings into searchable, structured knowledge. It transcribes audio, extracts summaries and follow-ups, stores meeting history, and answers questions across past meetings with source-grounded local AI.
 
-The application combines a Next.js dashboard, a FastAPI processing API, local audio storage, AI transcription and analysis providers, and PostgreSQL persistence. Its main AI pipeline can run completely on a local machine without paid AI APIs by using faster-whisper and Ollama.
+## Key Features
+
+- MP3, WAV, and M4A meeting audio upload with size and type validation
+- Local transcription with faster-whisper
+- Optional OpenAI transcription provider
+- Structured Ollama analysis validated with Pydantic
+- Summaries, decisions, action items, assignees, deadlines, priorities, and open questions
+- PostgreSQL meeting history and stored meeting detail
+- Deterministic transcript chunking with overlap
+- Local multilingual E5 embeddings stored as `vector(384)` values
+- pgvector cosine-similarity search across meeting transcripts
+- Grounded question answering over retrieved meeting context
+- Source attribution linking answers back to stored meetings
+- Responsive and accessible Next.js dashboard with recent meeting history
+
+The default local setup uses `faster-whisper`, `intfloat/multilingual-e5-small`, and Ollama with `llama3.2:3b`. No paid AI API is required for that configuration.
+
+## Quick Start (after initial setup)
+
+From the repository root, start the complete local application with:
+
+```bash
+./start.sh
+```
+
+Then open [http://localhost:3000](http://localhost:3000). On macOS and supported Linux desktops, the script also attempts to open this URL automatically; browser-launch failure does not stop the application.
+
+`start.sh` checks the project environment, PostgreSQL, Ollama, and the required model; applies Alembic migrations; then starts FastAPI and the Next.js development server. Press `Ctrl+C` to stop every process started by the script. An Ollama service that was already running is left untouched.
+
+This is a startup command, not an installer. Initial machine setup still requires PostgreSQL with pgvector, Ollama and `llama3.2:3b`, the root `.env`, Python dependencies in `.venv`, and frontend dependencies in `frontend/node_modules`. Follow [Local Setup](#local-setup) once before using the command.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User["User"] --> UI["Next.js dashboard"]
+    UI --> API["FastAPI"]
+
+    subgraph Processing["Meeting processing"]
+        API --> Audio["Local audio storage"]
+        Audio --> Whisper["faster-whisper"]
+        Whisper --> Transcript["Transcript"]
+        Transcript --> Analysis["Ollama structured analysis"]
+        Analysis --> MeetingData["Summary, decisions, action items, open questions"]
+        MeetingData --> PostgreSQL["PostgreSQL"]
+    end
+
+    subgraph Knowledge["Search and grounded RAG"]
+        Transcript --> Chunking["Transcript chunking"]
+        Chunking --> E5["Multilingual E5 embeddings"]
+        E5 --> Pgvector["PostgreSQL + pgvector"]
+        API --> Retrieval["Semantic retrieval"]
+        Pgvector --> Retrieval
+        Retrieval --> RAGOllama["Ollama grounded answer"]
+        RAGOllama --> Sources["Answer + meeting sources"]
+    end
+
+    Sources --> UI
+    PostgreSQL --> UI
+```
+
+Processing persists the transcript, structured analysis, action items, ordered transcript chunks, and their embeddings before a meeting is marked `completed`. If transcription, analysis, embedding generation, or persistence fails, the meeting is not reported as successfully processed.
 
 ## How It Works
 
-```mermaid
-flowchart TD
-    A["User uploads MP3, WAV, or M4A audio"] --> B["Next.js dashboard"]
-    B --> C["FastAPI"]
-    C --> D["Local audio storage"]
-    D --> E["faster-whisper"]
-    E --> F["Transcript"]
-    F --> G["Ollama local LLM"]
-    G --> H["Pydantic structured output validation"]
-    H --> I["PostgreSQL"]
-    I --> J["Dashboard results and meeting history"]
-```
-
-From the dashboard, the user provides a meeting title and recording. The frontend creates the meeting, uploads the audio, and calls the end-to-end processing endpoint. FastAPI transcribes the recording, asks the configured Ollama model for schema-constrained analysis, validates the result, and persists the meeting data for later retrieval.
-
-## Features
-
-- Meeting creation and persisted status lifecycle: `created`, `uploaded`, `processing`, `completed`, and `failed`
-- MP3, WAV, and M4A audio upload
-- Safe server-generated UUID filenames and a 50 MiB upload limit
-- Local faster-whisper transcription
-- Optional OpenAI Speech-to-Text provider
-- Local Ollama meeting analysis with a configurable model
-- Pydantic-derived JSON schema and validated structured AI output
-- Summary, explicit decision, and open-question extraction
-- Action-item extraction with task, assignee, deadline, and priority
-- End-to-end `POST /process` workflow
-- PostgreSQL persistence for meeting metadata, transcripts, analyses, and action items
-- Recent meeting history and individual meeting retrieval
-- Next.js dashboard with drag-and-drop upload
-- Responsive loading and user-friendly error states
-- Readable action-item cards and a collapsible transcript
-- Swagger/OpenAPI documentation
-- Alembic database migrations
-- Automated backend tests with isolated external AI dependencies
-
-The default and recommended local analysis model is `llama3.2:3b`. A different Ollama model can be selected through `OLLAMA_ANALYSIS_MODEL` without coupling the API route to a model name.
+1. Upload a meeting recording.
+2. The app transcribes and analyzes it.
+3. Results are stored in meeting history.
+4. Transcript chunks are embedded and indexed in pgvector.
+5. Ask questions across previous meetings.
+6. Answers are grounded in retrieved meeting sources.
 
 ## Tech Stack
 
+### Frontend
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+
 ### Backend
 
-- Python 3.12+
+- Python
 - FastAPI and Uvicorn
 - Pydantic and pydantic-settings
-- SQLAlchemy 2.x with async sessions
-- asyncpg
+- SQLAlchemy 2.x async with asyncpg
 - Alembic
-- httpx
 
 ### AI
 
-- faster-whisper for local speech-to-text
-- Ollama for local LLM inference
-- Configurable Ollama analysis model (`llama3.2:3b` by default)
-- OpenAI Speech-to-Text as an optional transcription provider
+- faster-whisper
+- Ollama with `llama3.2:3b`
+- `intfloat/multilingual-e5-small`
+- pgvector
+- Optional OpenAI Speech-to-Text
 
 ### Database
 
 - PostgreSQL
 
-### Frontend
-
-- Next.js with App Router
-- TypeScript
-- Tailwind CSS
-
 ### Testing
 
 - pytest
 - FastAPI dependency overrides
-- Temporary isolated test database sessions
-- httpx `MockTransport`
-
-## AI Provider Architecture
-
-Transcription uses a provider-based design. The HTTP route depends on `TranscriptionService`, while the service delegates work to the configured provider:
-
-```text
-FastAPI route
-    └── TranscriptionService
-            ├── local faster-whisper provider
-            └── OpenAI transcription provider
-```
-
-The provider is selected with `TRANSCRIPTION_PROVIDER`. Local faster-whisper is the recommended default for development because it avoids external API credentials and usage costs. The API contract and meeting-processing workflow remain independent of the selected provider.
-
-## Structured Meeting Analysis
-
-The analysis model does not return arbitrary prose. The Ollama request includes a JSON schema generated from the Pydantic `MeetingAnalysis` model, disables streaming and reasoning output, and uses deterministic generation settings. The response is parsed and validated before it can be returned or persisted.
-
-Representative output:
-
-```json
-{
-  "summary": "The team confirmed the release plan and assigned the remaining integration work.",
-  "decisions": ["Release the product on Monday"],
-  "action_items": [
-    {
-      "task": "Finish the API integration",
-      "assignee": "Dmytro",
-      "deadline": "Friday",
-      "priority": "medium"
-    }
-  ],
-  "open_questions": []
-}
-```
-
-Schema validation makes the LLM response safer to consume in automation workflows: downstream code receives predictable fields and types, while malformed or incomplete provider responses are rejected with a safe API error.
+- Mocked AI providers and isolated test persistence
 
 ## Project Structure
 
 ```text
 ai-meeting-assistant/
 ├── app/
-│   ├── api/             # FastAPI routes and HTTP orchestration
-│   ├── core/            # Environment-based application configuration
-│   ├── db/              # Async SQLAlchemy setup and persistence models
-│   ├── models/          # Pydantic request and response schemas
-│   ├── repositories/    # Meeting-specific persistence operations
-│   └── services/        # Audio, transcription, analysis, and processing logic
-├── alembic/             # Versioned PostgreSQL migrations
+│   ├── api/             # FastAPI routes and request-scoped dependencies
+│   ├── core/            # Settings and shared constants
+│   ├── db/              # Async SQLAlchemy setup and database models
+│   ├── models/          # Pydantic API schemas
+│   ├── repositories/    # Persistence and vector-search queries
+│   └── services/        # Audio, AI, chunking, retrieval, and RAG logic
+├── alembic/             # PostgreSQL and pgvector migrations
 ├── frontend/            # Next.js dashboard and typed API client
-├── tests/               # Isolated API, provider, workflow, and persistence tests
-├── storage/             # Runtime local audio files; excluded from Git
-├── alembic.ini          # Alembic configuration
-├── pyproject.toml       # Python dependencies and test configuration
+├── tests/               # Backend unit and integration tests
+├── storage/             # Runtime audio files; excluded from Git
+├── pyproject.toml       # Python package and test configuration
 └── README.md
 ```
 
-## API
+## API Overview
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Service health check |
-| `POST` | `/api/v1/meetings` | Create and persist a meeting |
+| `GET` | `/health` | Check backend health |
+| `POST` | `/api/v1/meetings` | Create a meeting record |
 | `GET` | `/api/v1/meetings` | List recent meetings with pagination |
 | `GET` | `/api/v1/meetings/{meeting_id}` | Retrieve stored meeting details |
 | `POST` | `/api/v1/meetings/{meeting_id}/audio` | Validate and store meeting audio |
 | `POST` | `/api/v1/meetings/{meeting_id}/transcribe` | Transcribe previously uploaded audio |
 | `POST` | `/api/v1/meetings/{meeting_id}/analyze` | Analyze a supplied transcript |
-| `POST` | `/api/v1/meetings/{meeting_id}/process` | Run transcription, analysis, and persistence |
+| `POST` | `/api/v1/meetings/{meeting_id}/process` | Run transcription, analysis, chunking, embedding, and persistence |
+| `POST` | `/api/v1/search` | Search transcript chunks by semantic similarity |
+| `POST` | `/api/v1/ask` | Answer a question from retrieved meeting context and return sources |
 
-After starting the backend, interactive Swagger documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+Interactive OpenAPI documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) while the backend is running.
 
-## Local Development
+## Local Setup
 
-### Prerequisites
+### Requirements
 
 - Python 3.12 or newer
-- Node.js and npm
-- PostgreSQL
+- Node.js 20.9 or newer and npm
+- PostgreSQL with the pgvector extension available
 - Ollama
 
-### Backend setup
+The first local embedding run downloads `intfloat/multilingual-e5-small` if it is not already present in the Sentence Transformers cache.
 
-Create a virtual environment and install the application with development dependencies:
+### Backend
+
+Create and activate a virtual environment, then install the application and development dependencies:
 
 ```bash
 python3.12 -m venv .venv
@@ -172,56 +166,58 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Create the PostgreSQL database with your preferred administration tool or the PostgreSQL CLI:
+Create a PostgreSQL database:
 
 ```bash
 createdb ai_meeting_assistant
 ```
 
-Copy the environment template and adjust the connection credentials for your PostgreSQL installation:
+Copy the environment template and replace its development placeholders with settings for your machine:
 
 ```bash
 cp .env.example .env
 ```
 
-```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/ai_meeting_assistant
+The PostgreSQL server must have pgvector available, and the migration user must be allowed to enable it. Alembic runs the following statement, so it does not normally need to be run separately:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Apply the database migration:
+Apply all migrations:
 
 ```bash
 alembic upgrade head
 ```
 
-Start Ollama in a separate terminal:
+Start Ollama in its own terminal:
 
 ```bash
 ollama serve
 ```
 
-Then install the configured default analysis model:
+With the Ollama service running, pull the default analysis/RAG model from another terminal:
 
 ```bash
 ollama pull llama3.2:3b
 ```
 
-Start FastAPI:
+Run the API from the repository root with the virtual environment active:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The backend is available at `http://127.0.0.1:8000`.
+The backend runs at `http://127.0.0.1:8000` by default.
 
-### Frontend setup
+### Frontend
 
 In a separate terminal:
 
 ```bash
 cd frontend
 cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
 
@@ -229,39 +225,42 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment Variables
 
-Backend variables are configured in the root `.env` file:
+Backend settings are read from the root `.env` file:
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | Async SQLAlchemy PostgreSQL connection URL |
-| `TRANSCRIPTION_PROVIDER` | `local` or `openai` transcription provider |
-| `LOCAL_WHISPER_MODEL` | faster-whisper model size or identifier |
-| `LOCAL_WHISPER_DEVICE` | Local inference device, such as `cpu` |
-| `LOCAL_WHISPER_COMPUTE_TYPE` | faster-whisper compute type, such as `int8` |
-| `OPENAI_API_KEY` | Optional OpenAI credential; leave empty in local mode |
-| `OPENAI_TRANSCRIPTION_MODEL` | OpenAI transcription model name |
-| `OLLAMA_BASE_URL` | Ollama server URL |
-| `OLLAMA_ANALYSIS_MODEL` | Ollama model used for structured analysis |
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Async SQLAlchemy PostgreSQL URL |
+| `TRANSCRIPTION_PROVIDER` | Yes | `local` or `openai` |
+| `LOCAL_WHISPER_MODEL` | Local transcription | faster-whisper model size or identifier |
+| `LOCAL_WHISPER_DEVICE` | Local transcription | Inference device such as `cpu` |
+| `LOCAL_WHISPER_COMPUTE_TYPE` | Local transcription | Compute type such as `int8` |
+| `LOCAL_EMBEDDING_MODEL` | Yes | Sentence Transformers model used for passage and query embeddings |
+| `LOCAL_EMBEDDING_DEVICE` | Yes | Embedding inference device such as `cpu` |
+| `OPENAI_API_KEY` | OpenAI transcription only | Optional OpenAI credential; leave empty in local mode |
+| `OPENAI_TRANSCRIPTION_MODEL` | OpenAI transcription only | OpenAI transcription model name |
+| `OLLAMA_BASE_URL` | Yes | Ollama server URL |
+| `OLLAMA_ANALYSIS_MODEL` | Yes | Ollama model used for structured analysis and grounded answers |
 
 The frontend reads:
 
-| Variable | Purpose |
-| --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Base URL of the FastAPI backend |
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Yes | Base URL of the FastAPI backend |
 
-The committed `.env.example` files contain development placeholders only. The backend `.env` and frontend `.env.local` files are excluded from Git. Never commit real API keys or database credentials.
+The committed `.env.example` files contain development placeholders only. Root `.env` files and frontend `.env.local` files are excluded from Git; do not commit credentials.
 
 ## Testing
 
-Run the backend suite from the repository root:
+Run backend verification from the repository root with the project virtual environment active:
 
 ```bash
 pytest
+alembic upgrade head
+alembic check
+python -m compileall -q app tests alembic
 ```
 
-The suite covers API validation, chunked audio storage, provider isolation, structured Ollama responses, end-to-end meeting processing, failure handling, and database persistence. Tests use dependency overrides, temporary test storage, an isolated test database, and mocked providers; they do not require a downloaded Whisper model, an OpenAI API call, or a live Ollama server.
-
-Verify the frontend:
+Run frontend verification separately:
 
 ```bash
 cd frontend
@@ -269,46 +268,40 @@ npm run lint
 npm run build
 ```
 
-## Local AI and Privacy
+Current V1 release audit: **109 backend tests passed**, Alembic is at `0003_embedding_dimension`, and the frontend lint and production build checks pass. Automated tests mock heavyweight AI/model dependencies; they do not download Whisper or E5 models and do not require a live Ollama server.
 
-With `TRANSCRIPTION_PROVIDER=local` and a local Ollama server, audio transcription and LLM analysis run on the same machine as the application. This reduces the need to send meeting content to third-party AI services, but the actual privacy characteristics still depend on the machine, network, configuration, and operational environment.
+## Local AI and Data
 
-Uploaded audio is currently stored under `storage/audio/` on the local filesystem. Meeting metadata, transcripts, structured analyses, and action items are stored in PostgreSQL.
+With `TRANSCRIPTION_PROVIDER=local`, meeting audio and text do not need to be sent to a paid AI API. Audio is stored under `storage/audio/` on the local filesystem. Meeting records, analyses, transcript chunks, and embeddings are stored in PostgreSQL.
+
+Local operation is not itself a complete privacy or security guarantee. Deployment configuration, host access, database access, logs, and backups still need to match the sensitivity of the meeting data.
 
 ## Current Limitations
 
-- Audio storage is limited to the local filesystem.
-- Meeting processing is synchronous and can keep an HTTP request open for the duration of transcription and analysis.
-- Authentication, users, and access controls are not implemented.
+- Processing is synchronous and can keep an HTTP request open during AI inference.
+- Audio uses local filesystem storage.
+- Authentication, users, and access control are not implemented.
 - There is no background job queue.
 - Speaker diarization is not implemented.
-- RAG and semantic search are not implemented.
+- Local AI speed and output quality depend on the available hardware and selected models.
 - Cloud deployment configuration is not included.
-- Local LLM output quality and hardware requirements depend on the selected model.
 
-## Roadmap
+## Optional V2
 
-The following items are planned ideas and are **not implemented**:
+- Authentication and per-user meeting access
+- Background processing and progress updates
+- Speaker diarization
+- Cloud object storage and deployment
+- Calendar and task-tracker integrations
 
-- pgvector and embedding generation
-- Semantic search over meeting history
-- RAG chat across meetings
-- LangGraph workflow orchestration
-- Google Calendar integration
-- Jira integration
-- Telegram or Slack notifications
-- Background processing
-- Docker development environment
-- Authentication and user accounts
-- Cloud object storage
-- Cloud deployment
+V1 is functionally complete; these are optional follow-up directions rather than missing V1 requirements.
 
 ## What This Project Demonstrates
 
-- End-to-end AI automation and full-stack integration
-- Local inference and optional external AI providers
-- LLM prompt and schema design with validated structured output
-- Provider abstractions that decouple API routes from AI implementations
-- REST API design and async PostgreSQL persistence
-- Database schema evolution with Alembic
-- Testing external AI dependencies without real API calls
+- End-to-end full-stack AI product delivery
+- Local transcription, structured LLM output, embeddings, retrieval, and grounded RAG
+- Async REST API design with PostgreSQL persistence and pgvector search
+- Schema validation and explicit failure handling around AI providers
+- Database evolution with reproducible Alembic migrations
+- Testing AI workflows without live model or network dependencies
+- A responsive frontend over typed backend contracts

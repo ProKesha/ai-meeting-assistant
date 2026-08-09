@@ -12,12 +12,16 @@ import {
 import { ProcessingState, type ProcessingStage } from "./processing-state";
 
 const ALLOWED_EXTENSIONS = [".mp3", ".wav", ".m4a"];
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 function audioValidationMessage(file: File): string | null {
   const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-  return ALLOWED_EXTENSIONS.includes(extension)
-    ? null
-    : "Choose an MP3, WAV, or M4A audio file.";
+  if (!ALLOWED_EXTENSIONS.includes(extension)) {
+    return "Choose an MP3, WAV, or M4A audio file.";
+  }
+  if (file.size === 0) return "Choose a recording that is not empty.";
+  if (file.size > MAX_FILE_SIZE_BYTES) return "Choose a recording smaller than 50 MB.";
+  return null;
 }
 
 function formatFileSize(bytes: number): string {
@@ -35,16 +39,17 @@ export function MeetingUploadForm({
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [stage, setStage] = useState<ProcessingStage>("creating");
+  const [stage, setStage] = useState<ProcessingStage>("preparing");
   const [errors, setErrors] = useState<{ title?: string; audio?: string }>({});
   const [requestError, setRequestError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function selectFile(nextFile: File | null) {
-    if (!nextFile) return;
+    if (!nextFile || isProcessing) return;
     const message = audioValidationMessage(nextFile);
     if (message) {
       setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setErrors((current) => ({ ...current, audio: message }));
       return;
     }
@@ -70,11 +75,10 @@ export function MeetingUploadForm({
 
     setIsProcessing(true);
     setRequestError(null);
-    let activeStage: ProcessingStage = "creating";
-    let analysisTimer: ReturnType<typeof setTimeout> | undefined;
+    let activeStage: ProcessingStage = "preparing";
 
     try {
-      setStage("creating");
+      setStage("preparing");
       const meeting = await createMeeting({
         title: title.trim(),
         description: description.trim() || undefined,
@@ -84,14 +88,15 @@ export function MeetingUploadForm({
       setStage("uploading");
       const upload = await uploadMeetingAudio(meeting.id, file);
 
-      activeStage = "transcribing";
-      setStage("transcribing");
-      analysisTimer = setTimeout(() => setStage("analyzing"), 3000);
+      activeStage = "processing";
+      setStage("processing");
       const processed = await processMeeting(meeting.id, upload.filename);
-      if (analysisTimer) clearTimeout(analysisTimer);
 
-      setStage("analyzing");
       onProcessed(processed);
+      setTitle("");
+      setDescription("");
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setTimeout(() => {
         document.getElementById("meeting-results")?.scrollIntoView({
           behavior: "smooth",
@@ -99,8 +104,7 @@ export function MeetingUploadForm({
         });
       }, 50);
     } catch (error) {
-      if (analysisTimer) clearTimeout(analysisTimer);
-      if (activeStage === "creating") {
+      if (activeStage === "preparing") {
         setRequestError("Could not create meeting. Please try again.");
       } else if (activeStage === "uploading") {
         setRequestError("Could not upload audio. Please check the file and try again.");
@@ -118,7 +122,7 @@ export function MeetingUploadForm({
     <>
       <section className="overflow-hidden rounded-3xl border border-[#dce3e6] bg-white shadow-[0_18px_55px_rgba(16,47,59,0.08)]">
         <div className="border-b border-[#e4e9eb] px-5 py-5 sm:px-7">
-          <h2 className="text-lg font-semibold tracking-tight text-[#173540]">Process a meeting</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-[#173540]">Upload meeting</h2>
           <p className="mt-1 text-sm text-[#74838a]">Add the details and recording. We’ll handle the rest.</p>
         </div>
 
@@ -182,7 +186,10 @@ export function MeetingUploadForm({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-[#294650]">
+              <label
+                htmlFor="meeting-audio"
+                className="mb-2 block text-sm font-semibold text-[#294650]"
+              >
                 Audio file <span className="text-[#b04b4b]">*</span>
               </label>
               <div

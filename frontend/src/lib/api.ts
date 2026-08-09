@@ -73,6 +73,26 @@ export interface MeetingResultData {
   analysis: MeetingAnalysis;
 }
 
+export interface AskMeetingsRequest {
+  question: string;
+  limit?: number;
+  meeting_id?: string | null;
+}
+
+export interface MeetingAnswerSource {
+  chunk_id: string;
+  meeting_id: string;
+  meeting_title: string;
+  chunk_index: number;
+  similarity: number;
+}
+
+export interface AskMeetingsResponse {
+  question: string;
+  answer: string;
+  sources: MeetingAnswerSource[];
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -151,5 +171,17 @@ export function getMeetings(
 export function getMeeting(meetingId: string): Promise<MeetingDetailResponse> {
   return requestJson<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`, {
     method: "GET",
+  });
+}
+
+export function askMeetings(input: AskMeetingsRequest): Promise<AskMeetingsResponse> {
+  return requestJson<AskMeetingsResponse>("/api/v1/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: input.question,
+      limit: input.limit ?? 5,
+      meeting_id: input.meeting_id ?? null,
+    }),
   });
 }

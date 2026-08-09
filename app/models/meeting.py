@@ -4,8 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.constants import ALLOWED_AUDIO_EXTENSIONS
 from app.models.analysis import MeetingAnalysis
-from app.services.audio_storage import ALLOWED_AUDIO_EXTENSIONS
 
 
 class MeetingCreate(BaseModel):

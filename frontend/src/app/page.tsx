@@ -13,12 +13,12 @@ export default function Home() {
               <p className="text-sm font-semibold tracking-tight text-[#102f3b] sm:text-base">
                 AI Meeting Assistant
               </p>
-              <p className="hidden text-xs text-[#718087] sm:block">Private workspace</p>
+              <p className="hidden text-xs text-[#718087] sm:block">Your meeting workspace</p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-[#dce5e4] bg-[#f6faf9] px-3 py-1.5 text-xs font-medium text-[#35665d]">
             <span className="h-2 w-2 rounded-full bg-[#3b9b78]" aria-hidden="true" />
-            Local AI workflow
+            Ready for your next meeting
           </div>
         </div>
       </header>
@@ -26,21 +26,20 @@ export default function Home() {
       <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <section className="mb-9 max-w-3xl">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#397568]">
-            Meeting intelligence, made simple
+            Meeting knowledge, made useful
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-[-0.035em] text-[#102f3b] sm:text-5xl sm:leading-[1.08]">
-            Turn meeting recordings into clear next steps.
+            Make every meeting useful after it ends.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[#607078] sm:text-lg">
-            Upload a recording and get a concise summary, explicit decisions, action items,
-            and open questions—all in one place.
+            Turn meeting recordings into summaries, action items, and searchable knowledge.
           </p>
         </section>
 
         <MeetingDashboard />
 
         <footer className="mt-12 flex flex-col gap-2 border-t border-[#dfe5e8] pt-6 text-xs text-[#7b898f] sm:flex-row sm:items-center sm:justify-between">
-          <p>Your recordings are processed through your configured backend services.</p>
+          <p>Upload, review, and ask—all from one focused workspace.</p>
           <p>MP3, WAV, and M4A · Up to 50 MB</p>
         </footer>
       </div>

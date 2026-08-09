@@ -20,12 +20,14 @@ export function RecentMeetings({
   isLoading,
   error,
   selectedId,
+  loadingMeetingId,
   onSelect,
 }: {
   meetings: MeetingListItemResponse[];
   isLoading: boolean;
   error: string | null;
   selectedId: string | null;
+  loadingMeetingId: string | null;
   onSelect: (meeting: MeetingListItemResponse) => void;
 }) {
   return (
@@ -55,15 +57,19 @@ export function RecentMeetings({
           {meetings.map((meeting) => {
             const isCompleted = meeting.status === "completed";
             const isSelected = selectedId === meeting.id;
+            const isOpening = loadingMeetingId === meeting.id;
             return (
               <button
                 key={meeting.id}
                 type="button"
                 onClick={() => onSelect(meeting)}
                 disabled={!isCompleted}
-                className={`w-full px-1 py-4 text-left transition first:pt-1 last:pb-1 ${
-                  isCompleted ? "cursor-pointer hover:bg-[#fafcfc]" : "cursor-default"
-                } ${isSelected ? "bg-[#f6faf9]" : ""}`}
+                aria-current={isSelected ? "true" : undefined}
+                className={`w-full rounded-xl px-3 py-4 text-left transition first:pt-3 last:pb-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#397568] ${
+                  isCompleted
+                    ? "cursor-pointer hover:bg-[#f6faf9]"
+                    : "cursor-default disabled:opacity-75"
+                } ${isSelected ? "bg-[#edf7f4]" : ""}`}
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -75,7 +81,7 @@ export function RecentMeetings({
                       statusStyles[meeting.status] ?? statusStyles.created
                     }`}
                   >
-                    {meeting.status}
+                    {isOpening ? "Opening…" : meeting.status}
                   </span>
                 </div>
                 {meeting.summary && (

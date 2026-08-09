@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.ask import router as ask_router
 from app.api.routes.meetings import router as meetings_router
+from app.api.routes.search import router as search_router
 
 app = FastAPI(title="AI Meeting & Task Assistant")
 
@@ -17,6 +19,8 @@ app.add_middleware(
 )
 
 app.include_router(meetings_router)
+app.include_router(search_router)
+app.include_router(ask_router)
 
 
 @app.get("/health")

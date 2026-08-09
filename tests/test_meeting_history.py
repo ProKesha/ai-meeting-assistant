@@ -1,6 +1,12 @@
+import asyncio
+
 from fastapi.testclient import TestClient
+from sqlalchemy import inspect
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.main import app
+from app.models.meeting import MeetingCreate
+from app.repositories.meetings import MeetingRepository
 
 client = TestClient(app)
 
@@ -46,3 +52,29 @@ def test_list_meetings_validates_pagination() -> None:
     assert client.get("/api/v1/meetings?limit=0").status_code == 422
     assert client.get("/api/v1/meetings?limit=101").status_code == 422
     assert client.get("/api/v1/meetings?offset=-1").status_code == 422
+
+
+def test_repository_loads_action_items_only_for_meeting_detail(
+    isolated_database: async_sessionmaker[AsyncSession],
+) -> None:
+    async def exercise_repository() -> None:
+        async with isolated_database() as session:
+            meeting = await MeetingRepository(session).create(
+                MeetingCreate(title="Relationship loading")
+            )
+            meeting_id = meeting.id
+
+        async with isolated_database() as session:
+            record = await MeetingRepository(session).get(meeting_id)
+            assert record is not None
+            assert "action_items" in inspect(record).unloaded
+
+        async with isolated_database() as session:
+            record = await MeetingRepository(session).get(
+                meeting_id,
+                include_action_items=True,
+            )
+            assert record is not None
+            assert "action_items" not in inspect(record).unloaded
+
+    asyncio.run(exercise_repository())

@@ -10,7 +10,7 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "AI Meeting Assistant",
-  description: "Turn meeting recordings into summaries, decisions, and action items.",
+  description: "Turn meeting recordings into summaries, action items, and searchable knowledge.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

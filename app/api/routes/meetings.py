@@ -2,11 +2,12 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.db.models import MeetingRecord
-from app.db.session import get_db_session
+from app.api.dependencies import (
+    get_meeting_processing_service,
+    get_meeting_repository,
+)
 from app.models.analysis import MeetingAnalysisRequest, MeetingAnalysisResponse
 from app.models.meeting import (
     AudioUploadResponse,
@@ -32,54 +33,32 @@ from app.services.analysis import (
     AnalysisServiceUnavailableError,
     get_analysis_service,
 )
-from app.services.transcription import (
-    TranscriptionService,
-    TranscriptionServiceError,
-    TranscriptionServiceUnavailableError,
-    get_transcription_service,
+from app.services.embedding import (
+    EmbeddingServiceError,
+    EmbeddingServiceUnavailableError,
 )
 from app.services.meeting_processing import (
     InvalidMeetingAudioFilenameError,
     MeetingAudioNotFoundError,
     MeetingProcessingService,
 )
+from app.services.transcription import (
+    TranscriptionService,
+    TranscriptionServiceError,
+    TranscriptionServiceUnavailableError,
+    get_transcription_service,
+)
 
 router = APIRouter(prefix="/api/v1/meetings", tags=["meetings"])
 logger = logging.getLogger(__name__)
 
 
-async def attempt_mark_failed(
-    repository: MeetingRepository,
-    meeting: MeetingRecord,
-) -> None:
-    try:
-        await repository.set_status(meeting, "failed")
-    except Exception:
-        logger.exception("Could not persist failed status for meeting %s", meeting.id)
-        try:
-            await repository.session.rollback()
-        except Exception:
-            logger.exception("Could not roll back failed status update")
-
-
-def get_meeting_processing_service(
-    audio_storage: AudioStorage = Depends(get_audio_storage),
-    transcription_service: TranscriptionService = Depends(get_transcription_service),
-    analysis_service: AnalysisService = Depends(get_analysis_service),
-) -> MeetingProcessingService:
-    return MeetingProcessingService(
-        audio_storage=audio_storage,
-        transcription_service=transcription_service,
-        analysis_service=analysis_service,
-    )
-
-
 @router.post("", response_model=MeetingResponse, status_code=status.HTTP_201_CREATED)
 async def create_meeting(
     meeting: MeetingCreate,
-    session: AsyncSession = Depends(get_db_session),
+    repository: MeetingRepository = Depends(get_meeting_repository),
 ) -> MeetingResponse:
-    record = await MeetingRepository(session).create(meeting)
+    record = await repository.create(meeting)
     return MeetingResponse(
         id=record.id,
         title=record.title,
@@ -92,9 +71,9 @@ async def create_meeting(
 async def list_meetings(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    session: AsyncSession = Depends(get_db_session),
+    repository: MeetingRepository = Depends(get_meeting_repository),
 ) -> list[MeetingListItemResponse]:
-    records = await MeetingRepository(session).list(limit=limit, offset=offset)
+    records = await repository.list(limit=limit, offset=offset)
     return [
         MeetingListItemResponse(
             id=record.id,
@@ -110,9 +89,9 @@ async def list_meetings(
 @router.get("/{meeting_id}", response_model=MeetingDetailResponse)
 async def get_meeting(
     meeting_id: UUID,
-    session: AsyncSession = Depends(get_db_session),
+    repository: MeetingRepository = Depends(get_meeting_repository),
 ) -> MeetingDetailResponse:
-    record = await MeetingRepository(session).get(meeting_id)
+    record = await repository.get(meeting_id, include_action_items=True)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
@@ -140,9 +119,8 @@ async def upload_meeting_audio(
     meeting_id: UUID,
     file: UploadFile = File(...),
     audio_storage: AudioStorage = Depends(get_audio_storage),
-    session: AsyncSession = Depends(get_db_session),
+    repository: MeetingRepository = Depends(get_meeting_repository),
 ) -> AudioUploadResponse:
-    repository = MeetingRepository(session)
     meeting = await repository.get(meeting_id)
     if meeting is None:
         await file.close()
@@ -250,55 +228,60 @@ async def process_meeting(
     meeting_id: UUID,
     request: MeetingProcessRequest,
     processing_service: MeetingProcessingService = Depends(get_meeting_processing_service),
-    session: AsyncSession = Depends(get_db_session),
+    repository: MeetingRepository = Depends(get_meeting_repository),
 ) -> MeetingProcessResponse:
-    repository = MeetingRepository(session)
     meeting = await repository.get(meeting_id)
     if meeting is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
-    await repository.set_status(meeting, "processing")
-
     try:
-        result = await run_in_threadpool(processing_service.process, meeting_id, request.filename)
+        result = await processing_service.process_and_persist(meeting, request.filename)
     except InvalidMeetingAudioFilenameError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid audio filename",
         ) from exc
     except MeetingAudioNotFoundError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Audio file not found",
         ) from exc
     except TranscriptionServiceUnavailableError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Transcription service unavailable",
         ) from exc
     except TranscriptionServiceError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Transcription failed",
         ) from exc
     except AnalysisServiceUnavailableError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Local analysis service unavailable",
         ) from exc
     except AnalysisServiceInvalidResponseError as exc:
-        await attempt_mark_failed(repository, meeting)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Invalid response from analysis service",
         ) from exc
-
-    await repository.persist_processing_result(meeting, result)
+    except EmbeddingServiceUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Local embedding service unavailable",
+        ) from exc
+    except EmbeddingServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Embedding generation failed",
+        ) from exc
+    except SQLAlchemyError as exc:
+        logger.exception("Meeting processing persistence failed for %s", meeting_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Meeting persistence failed",
+        ) from exc
 
     return MeetingProcessResponse(
         meeting_id=meeting_id,

@@ -1,10 +1,13 @@
-export type ProcessingStage = "creating" | "uploading" | "transcribing" | "analyzing";
+export type ProcessingStage = "preparing" | "uploading" | "processing";
 
 const stages: Array<{ key: ProcessingStage; label: string; detail: string }> = [
-  { key: "creating", label: "Creating meeting", detail: "Preparing your workspace" },
-  { key: "uploading", label: "Uploading audio", detail: "Sending your recording securely" },
-  { key: "transcribing", label: "Transcribing meeting", detail: "Turning speech into text" },
-  { key: "analyzing", label: "Analyzing meeting", detail: "Finding decisions and next steps" },
+  { key: "preparing", label: "Preparing meeting", detail: "Saving the meeting details" },
+  { key: "uploading", label: "Uploading audio", detail: "Sending your recording" },
+  {
+    key: "processing",
+    label: "Creating meeting knowledge",
+    detail: "Transcribing, analyzing, and saving the result",
+  },
 ];
 
 export function ProcessingState({ stage }: { stage: ProcessingStage }) {
@@ -18,8 +21,8 @@ export function ProcessingState({ stage }: { stage: ProcessingStage }) {
     >
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-[#173f48]">Processing your meeting</p>
-          <p className="mt-1 text-xs text-[#698078]">You can keep this page open while we work.</p>
+          <p className="text-sm font-semibold text-[#173f48]">Processing meeting…</p>
+          <p className="mt-1 text-xs text-[#698078]">Keep this page open while we work.</p>
         </div>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#397568] shadow-sm">
           Step {activeIndex + 1} of {stages.length}

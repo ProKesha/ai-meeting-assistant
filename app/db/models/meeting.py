@@ -37,6 +37,12 @@ class MeetingRecord(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    transcript_chunks: Mapped[list["TranscriptChunkRecord"]] = relationship(
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="TranscriptChunkRecord.chunk_index",
+    )
 
 
 class ActionItemRecord(Base):
