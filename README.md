@@ -1,5 +1,7 @@
 # AI Meeting Assistant
 
+[![CI](https://github.com/ProKesha/ai-meeting-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ProKesha/ai-meeting-assistant/actions/workflows/ci.yml)
+
 AI Meeting Assistant turns meeting recordings into searchable, structured knowledge. It transcribes audio, extracts summaries and follow-ups, stores meeting history, and answers questions across past meetings with source-grounded local AI.
 
 ## Key Features
@@ -32,6 +34,40 @@ Then open [http://localhost:3000](http://localhost:3000). On macOS and supported
 `start.sh` checks the project environment, PostgreSQL, Ollama, and the required model; applies Alembic migrations; then starts FastAPI and the Next.js development server. Press `Ctrl+C` to stop every process started by the script. An Ollama service that was already running is left untouched.
 
 This is a startup command, not an installer. Initial machine setup still requires PostgreSQL with pgvector, Ollama and `llama3.2:3b`, the root `.env`, Python dependencies in `.venv`, and frontend dependencies in `frontend/node_modules`. Follow [Local Setup](#local-setup) once before using the command.
+
+## Docker
+
+Docker Compose provides a reproducible production-style local environment with separate PostgreSQL/pgvector, migration, FastAPI, and Next.js containers. Copy the development configuration and replace the placeholder database password before the first run:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+This default command expects Ollama to be running on the host. The backend reaches it through `host.docker.internal`; the Compose configuration includes the Linux `host-gateway` mapping as well as Docker Desktop support. A host Ollama service on Linux must listen on an address reachable from Docker, not only `127.0.0.1`.
+
+For the most portable all-Docker local AI setup, use the optional `local-ai` profile. The first command starts PostgreSQL and Ollama, the second downloads the configured model once into the persistent Ollama volume, and the final command starts the complete stack:
+
+```bash
+docker compose --profile local-ai up -d postgres ollama
+docker compose --profile local-ai exec ollama ollama pull llama3.2:3b
+DOCKER_OLLAMA_BASE_URL=http://ollama:11434 \
+  docker compose --profile local-ai up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000). The API and interactive documentation are available at [http://localhost:8000](http://localhost:8000) and [http://localhost:8000/docs](http://localhost:8000/docs).
+
+Alembic runs exactly once in the `migrate` service before the backend starts. PostgreSQL data, uploaded audio, Ollama models, and Hugging Face/faster-whisper model caches use named volumes; model weights are never copied into application images or committed to Git. The first transcription or embedding request can still take time while its selected local model is downloaded into the cache volume.
+
+`NEXT_PUBLIC_API_BASE_URL` is a browser-visible Next.js build-time setting. If the backend is exposed on another host or port, set `DOCKER_PUBLIC_API_BASE_URL` before rebuilding the frontend image. Compose database credentials come from `.env`; production credentials do not belong in this development Compose file.
+
+Stop the stack without deleting persistent data:
+
+```bash
+docker compose --profile local-ai down
+```
+
+The existing [`./start.sh`](./start.sh) workflow remains the recommended fast local-development loop on macOS and Linux; Docker is intended for reproducibility and production-image verification.
 
 ## Architecture
 
@@ -123,6 +159,8 @@ ai-meeting-assistant/
 ├── frontend/            # Next.js dashboard and typed API client
 ├── tests/               # Backend unit and integration tests
 ├── storage/             # Runtime audio files; excluded from Git
+├── Dockerfile           # Production-oriented FastAPI image
+├── docker-compose.yml   # PostgreSQL, migrations, backend, frontend, and optional Ollama
 ├── pyproject.toml       # Python package and test configuration
 └── README.md
 ```
@@ -265,10 +303,24 @@ Run frontend verification separately:
 ```bash
 cd frontend
 npm run lint
+npm run typecheck
 npm run build
 ```
 
 Current V1 release audit: **109 backend tests passed**, Alembic is at `0003_embedding_dimension`, and the frontend lint and production build checks pass. Automated tests mock heavyweight AI/model dependencies; they do not download Whisper or E5 models and do not require a live Ollama server.
+
+## CI
+
+GitHub Actions runs on every push and pull request targeting `main`. The pipeline has independent backend and frontend jobs, followed by a Docker gate only when both succeed:
+
+- Backend dependency integrity and Python compilation
+- PostgreSQL/pgvector startup, `alembic upgrade head`, and `alembic check`
+- Backend pytest suite with mocked AI providers
+- Frontend ESLint, TypeScript typecheck, and production build
+- Docker Compose configuration validation
+- Independent backend and frontend Docker image builds
+
+The CI workflow does not call paid APIs, start Ollama, or download Whisper/E5/Ollama model weights.
 
 ## Local AI and Data
 
