@@ -1,10 +1,10 @@
 # Project Status
 
-Last verified: 2026-08-09
+Last verified: 2026-08-17
 
 ## Release State
 
-**V1 completed — ready for final commit and push after user review.**
+**V1 and the Docker/CI foundation are complete and merged into `main`.**
 
 The application now provides an end-to-end local meeting workflow: audio upload,
 transcription, structured analysis, persistent meeting history, transcript retrieval,
@@ -56,9 +56,22 @@ Repository: [ProKesha/ai-meeting-assistant](https://github.com/ProKesha/ai-meeti
 - Exact cosine search retained for the current local corpus; HNSW is intentionally deferred
   until observed scale or latency justifies an index
 
+### DevOps and CI
+
+- Production-oriented non-root Python 3.12 FastAPI image
+- Multi-stage Next.js standalone image running as a non-root user
+- Docker Compose services for PostgreSQL/pgvector, one-shot Alembic migrations,
+  backend, frontend, and optional Ollama
+- Persistent volumes for PostgreSQL, uploaded audio, Ollama models, and Hugging Face caches
+- Healthchecks and dependency ordering across the complete Compose stack
+- GitHub Actions jobs for backend, frontend, and Docker verification
+- Cached Python and npm dependency installation in CI
+- Docker image builds verified without publishing to an external registry
+- Host-based `./start.sh` development workflow preserved
+
 ## Verification
 
-Automated release checks completed successfully on 2026-08-09:
+Automated and local release checks completed successfully on 2026-08-17:
 
 - Backend: `109 passed` with one third-party Starlette TestClient deprecation warning
 - Alembic upgrade: database is at head
@@ -66,10 +79,19 @@ Automated release checks completed successfully on 2026-08-09:
 - Current Alembic head: `0003_embedding_dimension`
 - Python compilation: passed for `app`, `tests`, and `alembic`
 - Frontend ESLint: passed
+- Frontend TypeScript typecheck: passed
 - Frontend production build: passed
+- Next.js standalone runtime smoke test: passed
 - Git whitespace check: passed
 - Python dependency integrity and declared import smoke check: passed
 - One-command local startup via `./start.sh` implemented and smoke-tested
+- Python 3.12 backend container import: passed
+- PostgreSQL/pgvector, Ollama, backend, and frontend Compose services: healthy
+- One-shot Compose migration service: completed with exit code `0`
+- Backend and frontend Docker images: built successfully on Apple Silicon
+- Backend `/health`: HTTP 200; frontend root page: HTTP 200
+- Ollama `llama3.2:3b` model persisted in its Docker volume
+- Pull request and post-merge `main` CI: backend, frontend, and Docker jobs passed
 
 Manual V1 smoke testing also covered:
 
@@ -112,5 +134,6 @@ These are optional V2 directions. They are not required for the completed V1 sco
 
 ## Release Note
 
-The baseline repository is on `main`. The completed V1 changes remain intentionally
-uncommitted and unpushed pending the final audit review.
+V1 and the DevOps/CI foundation were merged into `main` through pull request #1.
+The repository now supports both a reproducible Docker Compose quick start and the
+existing host-based local development workflow.
