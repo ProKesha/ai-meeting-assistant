@@ -21,53 +21,82 @@ AI Meeting Assistant turns meeting recordings into searchable, structured knowle
 
 The default local setup uses `faster-whisper`, `intfloat/multilingual-e5-small`, and Ollama with `llama3.2:3b`. No paid AI API is required for that configuration.
 
-## Quick Start (after initial setup)
+## Quick Start with Docker (Recommended)
 
-From the repository root, start the complete local application with:
-
-```bash
-./start.sh
-```
-
-Then open [http://localhost:3000](http://localhost:3000). On macOS and supported Linux desktops, the script also attempts to open this URL automatically; browser-launch failure does not stop the application.
-
-`start.sh` checks the project environment, PostgreSQL, Ollama, and the required model; applies Alembic migrations; then starts FastAPI and the Next.js development server. Press `Ctrl+C` to stop every process started by the script. An Ollama service that was already running is left untouched.
-
-This is a startup command, not an installer. Initial machine setup still requires PostgreSQL with pgvector, Ollama and `llama3.2:3b`, the root `.env`, Python dependencies in `.venv`, and frontend dependencies in `frontend/node_modules`. Follow [Local Setup](#local-setup) once before using the command.
-
-## Docker
-
-Docker Compose provides a reproducible production-style local environment with separate PostgreSQL/pgvector, migration, FastAPI, and Next.js containers. Copy the development configuration and replace the placeholder database password before the first run:
+This is the simplest way to run the complete project from a fresh clone. It requires Git, Docker Desktop (macOS/Windows) or Docker Engine with Compose (Linux), and roughly 15–20 GB of free disk space for application images, build cache, and local AI models.
 
 ```bash
+git clone https://github.com/ProKesha/ai-meeting-assistant.git
+cd ai-meeting-assistant
 cp .env.example .env
-docker compose up --build
+docker compose config --quiet
 ```
 
-This default command expects Ollama to be running on the host. The backend reaches it through `host.docker.internal`; the Compose configuration includes the Linux `host-gateway` mapping as well as Docker Desktop support. A host Ollama service on Linux must listen on an address reachable from Docker, not only `127.0.0.1`.
-
-For the most portable all-Docker local AI setup, use the optional `local-ai` profile. The first command starts PostgreSQL and Ollama, the second downloads the configured model once into the persistent Ollama volume, and the final command starts the complete stack:
+Start PostgreSQL and Ollama, then download the default Ollama model once into its persistent Docker volume:
 
 ```bash
 docker compose --profile local-ai up -d postgres ollama
 docker compose --profile local-ai exec ollama ollama pull llama3.2:3b
-DOCKER_OLLAMA_BASE_URL=http://ollama:11434 \
-  docker compose --profile local-ai up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The API and interactive documentation are available at [http://localhost:8000](http://localhost:8000) and [http://localhost:8000/docs](http://localhost:8000/docs).
+Build and start the complete application:
 
-Alembic runs exactly once in the `migrate` service before the backend starts. PostgreSQL data, uploaded audio, Ollama models, and Hugging Face/faster-whisper model caches use named volumes; model weights are never copied into application images or committed to Git. The first transcription or embedding request can still take time while its selected local model is downloaded into the cache volume.
+```bash
+docker compose --profile local-ai up -d --build
+```
 
-`NEXT_PUBLIC_API_BASE_URL` is a browser-visible Next.js build-time setting. If the backend is exposed on another host or port, set `DOCKER_PUBLIC_API_BASE_URL` before rebuilding the frontend image. Compose database credentials come from `.env`; production credentials do not belong in this development Compose file.
+The initial backend build downloads heavy local-AI Python dependencies, so the first run can take considerably longer on a slower connection. Subsequent starts reuse Docker layers and persistent model caches. When every service is ready, open:
 
-Stop the stack without deleting persistent data:
+- Application: [http://localhost:3000](http://localhost:3000)
+- API health: [http://localhost:8000/health](http://localhost:8000/health)
+- API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Check service status in another terminal:
+
+```bash
+docker compose --profile local-ai ps -a
+```
+
+`postgres`, `ollama`, `backend`, and `frontend` should be `healthy`. The one-shot `migrate` service should show `Exited (0)`, which means Alembic completed successfully.
+
+Follow application logs when needed:
+
+```bash
+docker compose logs -f backend frontend
+```
+
+Stop the stack without deleting meetings, audio, or downloaded models:
 
 ```bash
 docker compose --profile local-ai down
 ```
 
-The existing [`./start.sh`](./start.sh) workflow remains the recommended fast local-development loop on macOS and Linux; Docker is intended for reproducibility and production-image verification.
+## Local Development
+
+Developers who already have Python, Node.js, PostgreSQL with pgvector, and Ollama installed on the host can use the faster native development workflow. Complete [Local Setup](#local-setup) once, then run:
+
+```bash
+./start.sh
+```
+
+`start.sh` validates local dependencies, applies Alembic migrations, starts FastAPI and Next.js development servers, and attempts to open [http://localhost:3000](http://localhost:3000). Press `Ctrl+C` to stop the processes it started.
+
+## Docker Architecture and Operations
+
+Docker Compose runs PostgreSQL/pgvector, a one-shot migration container, FastAPI, Next.js, and optional Ollama as separate services. Alembic completes before the backend starts, so migrations are not executed concurrently by application replicas.
+
+PostgreSQL data, uploaded audio, Ollama models, and Hugging Face/faster-whisper caches use named volumes. Model weights are never copied into application images or committed to Git. The first transcription or embedding request can take additional time while its selected model is downloaded into the cache volume.
+
+The recommended `local-ai` profile connects the backend to `http://ollama:11434`. To use an Ollama instance running on the host instead, omit the profile and override its Docker URL:
+
+```bash
+DOCKER_OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  docker compose up --build
+```
+
+Docker Desktop provides `host.docker.internal` automatically; the Compose configuration also provides the Linux `host-gateway` mapping. A Linux host Ollama service must listen on an address reachable from Docker.
+
+`NEXT_PUBLIC_API_BASE_URL` is embedded into browser code at Next.js build time. If the backend is exposed on a different host or port, set `DOCKER_PUBLIC_API_BASE_URL` before rebuilding the frontend image. Values in `.env.example` are development defaults only; do not reuse them as production credentials.
 
 ## Architecture
 
